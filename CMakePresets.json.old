@@ -1,0 +1,88 @@
+{
+    "version": 3,
+    "cmakeMinimumRequired": {
+      "major": 3,
+      "minor": 21,
+      "patch": 3
+    },
+    "configurePresets": [
+      {
+        "name": "linux",
+        "hidden": true,
+        "generator": "Ninja",
+        "architecture": {
+            "value": "x64",
+            "strategy": "external"
+        },
+        "condition": {
+            "type": "notEquals",
+            "lhs": "${hostSystemName}",
+            "rhs": "Windows"
+        }
+      },
+      {
+        "name": "windows",
+        "hidden": true,
+        "generator": "NMake Makefiles",
+        "architecture": {
+            "value": "x64",
+            "strategy": "external"
+        },
+        "condition": {
+            "type": "equals",
+            "lhs": "${hostSystemName}",
+            "rhs": "Windows"
+        }
+      },
+      {
+        "name": "Win Debug",
+        "inherits": ["windows", "base-debug"]
+      },
+      {
+        "name": "Win Release",
+        "inherits": ["windows", "base-release"]
+      },
+      {
+        "name": "Linux Debug",
+        "inherits": ["linux", "base-debug"]
+      },
+      {
+        "name": "Linux Release",
+        "inherits": ["linux", "base-release"]
+      },
+      {
+        "name": "base-debug",
+        "hidden": true,
+        "binaryDir": "${sourceDir}/../build/Debug",
+        "cacheVariables": {
+          "CMAKE_BUILD_TYPE": "Debug"
+        }
+      },
+      {
+        "name": "base-release",
+        "hidden": true,
+        "binaryDir": "${sourceDir}/../build/Release",
+        "cacheVariables": {
+          "CMAKE_BUILD_TYPE": "Release"
+        }
+      }
+    ],
+    "buildPresets": [
+        {
+          "name": "Win Debug",
+          "configurePreset": "Win Debug"
+        },
+        {
+          "name": "Win Release",
+          "configurePreset": "Win Release"
+        },
+        {
+          "name": "Linux Debug",
+          "configurePreset": "Linux Debug"
+        },
+        {
+          "name": "Linux Release",
+          "configurePreset": "Linux Release"
+        }
+    ]
+  }

@@ -1,0 +1,107 @@
+# v3.19 is required because lower versions do not support presets
+cmake_minimum_required(VERSION 3.19 FATAL_ERROR)
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_CXX_STANDARD 20)
+
+# Setting up ccache or sccache
+find_program(CCACHE "ccache")
+if(CCACHE)
+    message("${CCACHE} has been found in the system!")
+    set(CMAKE_C_COMPILER_LAUNCHER ${CCACHE})
+    set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE})
+else()
+    find_program(SCCACHE "sccache")
+    if(SCCACHE)
+        message("${SCCACHE} has been found in the system!")
+        set(CMAKE_C_COMPILER_LAUNCHER ${SCCACHE})
+        set(CMAKE_CXX_COMPILER_LAUNCHER ${SCCACHE})
+    else()
+        message("neither ccache or sccache have been found in the system!")
+    endif(SCCACHE)
+endif(CCACHE)
+
+# Project
+set(PROJECT_DESCRIPTION "Server for NDI RIST Encoder")
+set(ONLINE_REPOSITORY "https://github.com/patcarter883/ndi-rist-server.git")
+project(
+    "ndi-rist-server"
+        DESCRIPTION ${PROJECT_DESCRIPTION}
+        HOMEPAGE_URL ${ONLINE_REPOSITORY}
+)
+
+
+set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+# Clang compile commands are generated here:
+# build/Debug/compile_commands.json
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
+endif()
+
+
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/int")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/lib")
+
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
+add_executable(${PROJECT_NAME} src/main.cpp)
+
+IF (WIN32)
+
+    find_package(GStreamer REQUIRED)
+    find_package (Threads)
+
+    target_link_libraries(${PROJECT_NAME} PRIVATE ${GSTREAMER_LIBRARIES})
+
+ELSE()
+    find_package(PkgConfig REQUIRED)
+    pkg_search_module(gstreamer REQUIRED IMPORTED_TARGET gstreamer-1.0>=1.4)
+    pkg_search_module(gstreamer-sdp REQUIRED IMPORTED_TARGET gstreamer-sdp-1.0>=1.4)
+    pkg_search_module(gstreamer-rtp REQUIRED IMPORTED_TARGET gstreamer-rtp-1.0>=1.4)
+    pkg_search_module(gstreamer-app REQUIRED IMPORTED_TARGET gstreamer-app-1.0>=1.4)
+    pkg_search_module(gstreamer-video REQUIRED IMPORTED_TARGET gstreamer-video-1.0>=1.4)
+
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+    PkgConfig::gstreamer
+    PkgConfig::gstreamer-sdp
+    PkgConfig::gstreamer-rtp
+    PkgConfig::gstreamer-app
+    PkgConfig::gstreamer-video)
+ENDIF()
+
+target_include_directories(${PROJECT_NAME} PUBLIC ${GSTREAMER_INCLUDE_DIRS})
+
+add_subdirectory(src)
+add_subdirectory(extern/rpclib)
+add_subdirectory(extern/rist-cpp rist-cpp)
+
+target_link_libraries(
+    ${PROJECT_NAME}
+    PRIVATE
+        # ${PROJECT_NAME}_LIB
+        rpc
+        ristnet
+)
+
+add_dependencies(${PROJECT_NAME} rpc ristnet)
+
+find_package(Git QUIET)
+if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+# Update submodules as needed
+    option(GIT_SUBMODULE "Check submodules during build" ON)
+    if(GIT_SUBMODULE)
+        message(STATUS "Submodule update")
+        execute_process(COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive --remote
+                        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..
+                        RESULT_VARIABLE GIT_SUBMOD_RESULT)
+        if(NOT GIT_SUBMOD_RESULT EQUAL "0")
+            message(FATAL_ERROR "git submodule update --init --recursive failed with ${GIT_SUBMOD_RESULT}, please checkout submodules")
+        endif()
+    endif()
+endif()
+
+if(NOT EXISTS "${CMAKE_SOURCE_DIR}/extern/rpclib/CMakeLists.txt")
+    message(FATAL_ERROR "The submodules were not downloaded! GIT_SUBMODULE was turned off or failed. Please update submodules and try again.")
+endif()

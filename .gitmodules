@@ -1,0 +1,7 @@
+[submodule "rpclib"]
+	path = extern/rpclib
+	url = https://github.com/rpclib/rpclib.git
+[submodule "rist-cpp"]
+	path = extern/rist-cpp
+	url = https://github.com/patcarter883/rist-cpp.git
+	branch = swxtch

@@ -1,0 +1,31 @@
+name: Build and test on Windows
+on:
+  workflow_call:
+
+concurrency:
+  group: "${{ github.ref }}-windows"
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-2019
+    timeout-minutes: 60
+    steps:
+    - uses: actions/checkout@v3
+    - name: Setup sccache
+      uses: hendrikmuhs/ccache-action@main
+      with:
+        key: ${{ github.job }}
+        max-size: 1000M
+        variant: sccache
+    - name: Configure CMake and build
+      run: ./ProjectFolder/scripts/windows/create_release.ps1 withTests
+    - name: Run tests
+      run: ./ProjectFolder/scripts/windows/run_tests.ps1 Release
+    - uses: actions/upload-artifact@v3
+      if: success()
+      with:
+        name: "windows-artifacts"
+        retention-days: 28
+        path: |-
+          build/Release/bin/Debug/cpp-cmake-template.exe
