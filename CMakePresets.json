@@ -99,9 +99,8 @@
     },
     {
       "name": "ci-win64",
-      "inherits": ["flags-msvc", "ci-std"],
-      "generator": "Visual Studio 17 2022",
-      "architecture": "x64",
+      "inherits": ["ci-std"],
+      "generator": "NMake Makefiles",
       "hidden": true
     },
     {
@@ -148,7 +147,7 @@
     },
     {
       "name": "ci-windows",
-      "inherits": ["ci-build", "ci-win64", "dev-mode"]
+      "inherits": ["ci-build", "ci-win64"]
     }
   ]
 }

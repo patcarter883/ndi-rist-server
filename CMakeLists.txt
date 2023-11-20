@@ -43,6 +43,7 @@ IF (WIN32)
     find_package (Threads)
 
     target_link_libraries(ndi-rist-server_exe PRIVATE ${GSTREAMER_LIBRARIES})
+    target_link_libraries(ndi-rist-server_exe PRIVATE iphlpapi wsock32 ws2_32 Threads::Threads)
 
 ELSE()
     find_package(PkgConfig REQUIRED)
@@ -68,7 +69,7 @@ target_include_directories(ndi-rist-server_exe PUBLIC ${CMAKE_CURRENT_SOURCE_DIR
 target_include_directories(ndi-rist-server_exe PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/extern/rist-cpp/rist/inc/ ${CMAKE_CURRENT_SOURCE_DIR}/extern/rist-cpp/rist/include/ ${CMAKE_CURRENT_SOURCE_DIR}/extern/rist-cpp/rist/include/librist ${CMAKE_CURRENT_SOURCE_DIR}/extern/rist-cpp/rist/build/include/librist)
 
 
-target_link_libraries(ndi-rist-server_exe PRIVATE ndi-rist-server_lib rpc ristnet)
+target_link_libraries(ndi-rist-server_exe PRIVATE rpc ristnet)
 add_dependencies(ndi-rist-server_exe rpc ristnet)
 # ---- Install rules ----
 
