@@ -1,4 +1,7 @@
 #include <iostream>
+using std::cout;
+using std::cerr;
+using std::endl;
 #include <thread>
 
 #include <gst/allocators/gstdmabuf.h>
@@ -134,6 +137,7 @@ void runGStreamerThread() {
 
 void start(std::string rtmpTarget)
 {
+  std::cout << "Start Requested for destination " <<  rtmpTarget << std::endl;
 	app.isPlaying = true;
 	config.rtmp_output_address = rtmpTarget;
 	ristThread = std::thread(runRistThread);
@@ -149,7 +153,7 @@ void stop() {
 int main()
 {
   gst_init(NULL, NULL);
-
+  std::cout << "RIST Restreamer Started" << std::endl;
   // Create a server that listens on port 8080, or whatever the user selected
   rpc::server srv("0.0.0.0", 5999);
 
