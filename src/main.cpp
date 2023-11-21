@@ -153,6 +153,10 @@ void start(std::string rtmpTarget)
 
 void stop() {
 	app.isPlaying = false;
+  if (g_main_loop_is_running(app.loop))
+	{
+		g_main_loop_quit(app.loop);
+	}
 	ristThread.join();
 	gstreamerThread.join();
 }
