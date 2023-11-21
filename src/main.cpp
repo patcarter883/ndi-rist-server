@@ -153,9 +153,11 @@ void stop() {
 int main()
 {
   gst_init(NULL, NULL);
-  std::cout << "RIST Restreamer Started" << std::endl;
+  
   // Create a server that listens on port 8080, or whatever the user selected
   rpc::server srv("0.0.0.0", 5999);
+
+  std::cout << "RIST Restreamer Started - Listening on port " << srv.port() << std::endl;
 
   srv.bind("start", &start);
   srv.bind("stop", &stop);
