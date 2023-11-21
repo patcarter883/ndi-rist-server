@@ -138,8 +138,6 @@ void start(std::string rtmpTarget)
 	config.rtmp_output_address = rtmpTarget;
 	ristThread = std::thread(runRistThread);
 	gstreamerThread = std::thread(runGStreamerThread);
-  ristThread.join();
-	gstreamerThread.join();
 }
 
 void stop() {
