@@ -134,12 +134,12 @@ void stop() {
 static gboolean
 datasrc_message(GstBus *bus, GstMessage *message, App *app)
 {
-	GError *err;
-	gchar *debug_info;
 
 	switch (GST_MESSAGE_TYPE(message))
 	{
 	case GST_MESSAGE_ERROR:
+    GError *err;
+    gchar *debug_info;
 		gst_message_parse_error(message, &err, &debug_info);
 		cerr << "Received error from datasrc_pipeline..." << endl;
 		cerr << "Error received from element " << GST_OBJECT_NAME(message->src) << ": " << err->message << endl;
@@ -153,6 +153,12 @@ datasrc_message(GstBus *bus, GstMessage *message, App *app)
 		cerr << "Received EOS from pipeline..." << endl;
 		stop();
 		break;
+  case GST_MESSAGE_STREAM_STATUS:
+    GstStreamStatusType *type;
+    GstElement *owner;
+    gst_message_parse_stream_status(message, type, &owner);
+    cout << GST_MESSAGE_TYPE_NAME(type) << " received from element " << GST_OBJECT_NAME(message->src) << endl;
+    break;
 	default:
     if (app->debug)
   {
