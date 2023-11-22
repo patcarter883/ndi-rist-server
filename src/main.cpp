@@ -37,10 +37,10 @@ typedef struct _Config Config;
 struct _Config
 {
   std::string rist_input_address =
-      "rist://@127.0.0.1:5000?buffer-min=245&buffer-max=1000&rtt-min=40&rtt-max=500&"
-      "reorder-buffer=60&congestion-control=1";
+      "rist://@127.0.0.1:5000?buffer-min=245&buffer-max=10000&rtt-min=25&rtt-max=500&"
+      "reorder-buffer=500&congestion-control=1";
   std::string rtmp_output_address =
-      "rtmp://sydney.restream.io/live/re_6467989_5e25e884e7fc0b843888";
+      "";
 };
 
 /* Globals */
@@ -82,7 +82,7 @@ dataFromSender(const uint8_t *buf, size_t len, std::shared_ptr<RISTNetReceiver::
 
   if (ret != GST_FLOW_OK) {
       /* some error, stop sending data */
-      GST_DEBUG ("some error");
+      cerr << "Appsrc buffer push error" << endl;
       g_signal_emit_by_name (app.videosrc, "end-of-stream", &ret);
       return 1;
   }
@@ -186,7 +186,7 @@ void runGStreamerThread() {
   GstBus *datasrc_bus;
 
 	app.loop = g_main_loop_new(NULL, FALSE);
-	std::string pipeline_str = "flvmux streamable=true name=mux ! queue ! rtmpsink location='" + config.rtmp_output_address + "'name=rtmpSink multiqueue name=outq appsrc name=videosrc ! queue2 ! tsparse set-timestamps=true ! tsdemux name=demux demux. ! av1parse ! queue ! nvav1dec ! queue ! videoscale ! (memory:CUDAMemory)video/x-raw,width=2560,height=1440 ! queue ! nvh264enc rc-mode=cbr-hq bitrate=16000 gop-size=120 preset=hq ! video/x-h264,framerate=60/1,profile=high ! h264parse ! outq.sink_0 outq.src_0 ! mux.  demux. ! aacparse ! queue max-size-time=5000000000 ! outq.sink_1 outq.src_1 ! mux.";
+	std::string pipeline_str = "flvmux streamable=true name=mux ! queue ! rtmpsink location='" + config.rtmp_output_address + "'name=rtmpSink multiqueue name=outq appsrc sync=false name=videosrc ! queue2 ! tsparse set-timestamps=true ! tsdemux name=demux demux. ! av1parse ! queue ! nvav1dec ! queue ! videoscale ! (memory:CUDAMemory)video/x-raw,width=2560,height=1440 ! queue ! nvh264enc rc-mode=cbr-hq bitrate=16000 gop-size=120 preset=hq ! video/x-h264,framerate=60/1,profile=high ! h264parse ! outq.sink_0 outq.src_0 ! mux.  demux. ! aacparse ! queue max-size-time=5000000000 ! outq.sink_1 outq.src_1 ! mux.";
 	// std::string pipeline_str = "flvmux streamable=true name=mux ! queue ! rtmpsink name=rtmpSink location='rtmp://sydney.restream.io/live/re_6467989_5e25e884e7fc0b843888 live=true' multiqueue name=outq appsrc name=videosrc ! queue2 ! tsparse set-timestamps=true alignment=7 ! tsdemux name=demux demux. ! av1parse ! queue ! d3d11av1dec ! queue ! cudascale ! video/x-raw,width=2560,height=1440 ! queue ! amfh264enc rate-control=cbr bitrate=16000 gop-size=120 ! video/x-h264,framerate=60/1,profile=high ! h264parse ! outq.sink_0 outq.src_0 ! mux.  demux. ! aacparse ! queue max-size-time=5000000000 ! outq.sink_1 outq.src_1 ! mux.";
   cout << "Running Pipeline: " << pipeline_str << endl;
 	app.datasrc_pipeline = gst_parse_launch(pipeline_str.c_str(), &error);
