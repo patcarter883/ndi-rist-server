@@ -37,8 +37,7 @@ typedef struct _Config Config;
 struct _Config
 {
   std::string rist_input_address =
-      "rist://@127.0.0.1:5000?buffer-min=245&buffer-max=10000&rtt-min=25&rtt-max=500&"
-      "reorder-buffer=500&congestion-control=1";
+      "rist://@0.0.0.0:5000?bandwidth=10000buffer-min=245&buffer-max=5000&rtt-min=40&rtt-max=500&reorder-buffer=120&congestion-control=1";
   std::string rtmp_output_address =
       "";
 };
@@ -48,6 +47,7 @@ Config config;
 App app;
 
 std::thread gstreamerThread;
+std::thread rpcThread;
 
 //Return a connection object. (Return nullptr if you don't want to connect to that client)
 std::shared_ptr<RISTNetReceiver::NetworkConnection> validateConnection(const std::string &ipAddress, uint16_t port) {
@@ -67,6 +67,10 @@ std::shared_ptr<RISTNetReceiver::NetworkConnection> validateConnection(const std
     return netConn;
 }
 
+void clientDisconnect(const std::shared_ptr<RISTNetReceiver::NetworkConnection>& connection, const rist_peer& peer) {
+    std::cout << "Client disconnected from receiver" << endl;
+}
+
 int
 dataFromSender(const uint8_t *buf, size_t len, std::shared_ptr<RISTNetReceiver::NetworkConnection> &connection,
                rist_peer *pPeer, uint16_t connectionID) {
@@ -76,7 +80,7 @@ dataFromSender(const uint8_t *buf, size_t len, std::shared_ptr<RISTNetReceiver::
 
     buffer = gst_buffer_new_memdup (buf, len);
 
-    g_signal_emit_by_name (app.videosrc, "push-buffer", buffer, &ret);
+   g_signal_emit_by_name (app.videosrc, "push-buffer", buffer, &ret);
     gst_buffer_unref (buffer);
 
   if (ret != GST_FLOW_OK) {
@@ -91,11 +95,7 @@ dataFromSender(const uint8_t *buf, size_t len, std::shared_ptr<RISTNetReceiver::
 
 int ristLog(void *arg, enum rist_log_level logLevel, const char *msg)
 {
-  if ((app.debug && logLevel < 8) || (!app.debug && logLevel < 7))
-  {
     cout << msg << endl;
-  }
-
 	return 1;
 }
 
@@ -106,7 +106,9 @@ void stop() {
 	{
 		g_main_loop_quit(app.loop);
 	}
-	gstreamerThread.join();
+  if (gstreamerThread.joinable()) {
+    gstreamerThread.join();
+  }
 }
 
 static gboolean
@@ -119,7 +121,7 @@ datasrc_message(GstBus *bus, GstMessage *message, App *app)
     GError *err;
     gchar *debug_info;
 		gst_message_parse_error(message, &err, &debug_info);
-		cerr << "Received error from datasrc_pipeline..." << endl;
+		cerr << "Received error from pipeline..." << endl;
 		cerr << "Error received from element " << GST_OBJECT_NAME(message->src) << ": " << err->message << endl;
 		cerr << "Debugging information:  " << (debug_info ? debug_info : "none") << endl;
 		g_clear_error(&err);
@@ -149,6 +151,7 @@ datasrc_message(GstBus *bus, GstMessage *message, App *app)
 
 void runGStreamerThread() {
     RISTNetReceiver ristReceiver;
+    GstCaps *caps;
 
   ristReceiver.validateConnectionCallback = std::bind(
       &validateConnection, std::placeholders::_1, std::placeholders::_2);
@@ -159,10 +162,13 @@ void runGStreamerThread() {
                                                     std::placeholders::_3,
                                                     std::placeholders::_4,
 													std::placeholders::_5);
+                           // client has disconnected
+    ristReceiver.clientDisconnectedCallback =
+        std::bind(&clientDisconnect, std::placeholders::_1, std::placeholders::_2);
   std::vector<std::string> interfaceListReceiver;
   interfaceListReceiver.push_back(config.rist_input_address);
   RISTNetReceiver::RISTNetReceiverSettings myReceiveConfiguration;
-  myReceiveConfiguration.mLogLevel = RIST_LOG_INFO;
+  myReceiveConfiguration.mLogLevel = app.debug ? RIST_LOG_DEBUG : RIST_LOG_INFO;
 	myReceiveConfiguration.mProfile = RIST_PROFILE_MAIN;
 	myReceiveConfiguration.mLogSetting.get()->log_cb = *ristLog;
   // Initialize the receiver
@@ -177,12 +183,13 @@ void runGStreamerThread() {
   GstBus *datasrc_bus;
 
 	app.loop = g_main_loop_new(NULL, FALSE);
-	std::string pipeline_str = "flvmux streamable=true name=mux ! queue ! rtmpsink location='" + config.rtmp_output_address + "'name=rtmpSink multiqueue name=outq appsrc name=videosrc ! queue2 ! tsparse set-timestamps=true ! tsdemux name=demux demux. ! av1parse ! queue ! nvav1dec ! queue ! cudascale ! video/x-raw(memory:CUDAMemory),width=2560,height=1440 ! queue ! nvh264enc rc-mode=cbr-hq bitrate=16000 gop-size=120 preset=hq ! video/x-h264,framerate=60/1,profile=high ! h264parse ! outq.sink_0 outq.src_0 ! mux.  demux. ! aacparse ! queue max-size-time=5000000000 ! outq.sink_1 outq.src_1 ! mux.";
+	// std::string pipeline_str = "flvmux streamable=true name=mux ! queue ! rtmpsink location='" + config.rtmp_output_address + "' name=rtmpSink multiqueue name=outq udpsrc port=6000 name=videosrc ! queue2 ! tsparse set-timestamps=true ! tsdemux name=demux demux. ! av1parse ! queue ! nvav1dec ! queue ! cudascale ! queue ! nvh264enc rc-mode=cbr-hq bitrate=16000 gop-size=120 preset=hq ! video/x-h264,framerate=60/1,profile=high ! h264parse ! outq.sink_0 outq.src_0 ! mux.  demux. ! aacparse ! queue max-size-time=5000000000 ! outq.sink_1 outq.src_1 ! mux.";
+	std::string pipeline_str = "flvmux streamable=true name=mux ! queue ! rtmpsink location='" + config.rtmp_output_address + "' name=rtmpSink multiqueue name=outq appsrc emit-signals=false block=true is-live=true name=videosrc ! queue2 ! tsparse set-timestamps=true alignment=7 ! tsdemux name=demux demux. ! av1parse ! queue ! nvav1dec ! queue ! cudascale ! video/x-raw(memory:CUDAMemory),width=2560,height=1440 ! queue ! nvh264enc rc-mode=cbr-hq bitrate=16000 gop-size=120 preset=hq ! video/x-h264,framerate=60/1,profile=high ! h264parse ! outq.sink_0 outq.src_0 ! mux.  demux. ! aacparse ! queue max-size-time=5000000000 ! outq.sink_1 outq.src_1 ! mux.";
 	// std::string pipeline_str = "flvmux streamable=true name=mux ! queue ! rtmpsink name=rtmpSink location='rtmp://sydney.restream.io/live/re_6467989_5e25e884e7fc0b843888 live=true' multiqueue name=outq appsrc name=videosrc ! queue2 ! tsparse set-timestamps=true alignment=7 ! tsdemux name=demux demux. ! av1parse ! queue ! d3d11av1dec ! queue ! cudascale ! video/x-raw,width=2560,height=1440 ! queue ! amfh264enc rate-control=cbr bitrate=16000 gop-size=120 ! video/x-h264,framerate=60/1,profile=high ! h264parse ! outq.sink_0 outq.src_0 ! mux.  demux. ! aacparse ! queue max-size-time=5000000000 ! outq.sink_1 outq.src_1 ! mux.";
   cout << "Running Pipeline: " << pipeline_str << endl;
 	app.datasrc_pipeline = gst_parse_launch(pipeline_str.c_str(), &error);
   if (error) {
-    cerr << "Error: " << error->message << endl;
+    cerr << "Parse Error: " << error->message << endl;
     g_clear_error (&error);
   }
   if (app.datasrc_pipeline == NULL)
@@ -190,8 +197,12 @@ void runGStreamerThread() {
 		cerr << "*** Bad pipeline. ***" << endl;
 	}
 	app.videosrc = gst_bin_get_by_name(GST_BIN(app.datasrc_pipeline), "videosrc");
-	// GstElement* rtmpsink = gst_bin_get_by_name(GST_BIN(app.datasrc_pipeline), "rtmpSink");
-	// g_object_set(G_OBJECT(rtmpsink), "location", config.rtmp_output_address.c_str(), NULL);
+/* set the caps on the source */
+  caps = gst_caps_new_simple ("video/mpegts",
+    "systemstream",G_TYPE_BOOLEAN,true,
+    "packetsize",G_TYPE_INT,188,
+     NULL);
+   gst_app_src_set_caps(GST_APP_SRC(app.videosrc), caps);
 
   datasrc_bus = gst_element_get_bus(app.datasrc_pipeline);
 
@@ -199,14 +210,18 @@ void runGStreamerThread() {
 	gst_bus_add_watch(datasrc_bus, (GstBusFunc)datasrc_message, &app);
 	gst_object_unref(datasrc_bus);
 
-	gst_element_set_state(app.datasrc_pipeline, GST_STATE_PLAYING);
+  cout << "Starting pipeline." << endl;
 
+	auto state_ret = gst_element_set_state(app.datasrc_pipeline, GST_STATE_PLAYING);
+  cout << "Pipeline state set " << state_ret << endl;
 	g_main_loop_run(app.loop);
-	gst_element_set_state(app.datasrc_pipeline, GST_STATE_NULL);
-
+	state_ret = gst_element_set_state(app.datasrc_pipeline, GST_STATE_NULL);
+  cout << "Pipeline state set " << state_ret << endl;
 	gst_object_unref(GST_OBJECT(app.datasrc_pipeline));
 	g_main_loop_unref(app.loop);
 	app.isPlaying = false;
+
+  ristReceiver.destroyReceiver();
 
   return;
 }
@@ -217,6 +232,19 @@ void start(std::string rtmpTarget)
 	app.isPlaying = true;
 	config.rtmp_output_address = rtmpTarget;
 	gstreamerThread = std::thread(runGStreamerThread);
+}
+
+void runRpc() {
+ // Create a server that listens on port 8080, or whatever the user selected
+  rpc::server srv("0.0.0.0", 5999);
+
+  std::cout << "RIST Restreamer Started - Listening on port " << srv.port() << std::endl;
+
+  srv.bind("start", &start);
+  srv.bind("stop", &stop);
+
+  // Run the server loop.
+  srv.run();
 }
 
 int main(int argc, char **argv)
@@ -232,15 +260,15 @@ int main(int argc, char **argv)
     }
    }
   
-  // Create a server that listens on port 8080, or whatever the user selected
-  rpc::server srv("0.0.0.0", 5999);
+  rpcThread = std::thread(runRpc);
+  if (rpcThread.joinable()) {
+    rpcThread.join();
+  }
 
-  std::cout << "RIST Restreamer Started - Listening on port " << srv.port() << std::endl;
+  if (gstreamerThread.joinable()) {
+    gstreamerThread.join();
+  }
 
-  srv.bind("start", &start);
-  srv.bind("stop", &stop);
-
-  // Run the server loop.
-  srv.run();
+ 
   return 0;
 }
