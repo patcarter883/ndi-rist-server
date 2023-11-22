@@ -153,12 +153,6 @@ datasrc_message(GstBus *bus, GstMessage *message, App *app)
 		cerr << "Received EOS from pipeline..." << endl;
 		stop();
 		break;
-  case GST_MESSAGE_STREAM_STATUS:
-    GstStreamStatusType *type;
-    GstElement *owner;
-    gst_message_parse_stream_status(message, type, &owner);
-    cout << GST_MESSAGE_TYPE_NAME(type) << " received from element " << GST_OBJECT_NAME(message->src) << endl;
-    break;
 	default:
     if (app->debug)
   {
@@ -192,7 +186,7 @@ void runGStreamerThread() {
 	{
 		cerr << "*** Bad pipeline. ***" << endl;
 	}
-	// app.videosrc = gst_bin_get_by_name(GST_BIN(app.datasrc_pipeline), "videosrc");
+	app.videosrc = gst_bin_get_by_name(GST_BIN(app.datasrc_pipeline), "videosrc");
 	// GstElement* rtmpsink = gst_bin_get_by_name(GST_BIN(app.datasrc_pipeline), "rtmpSink");
 	// g_object_set(G_OBJECT(rtmpsink), "location", config.rtmp_output_address.c_str(), NULL);
 
