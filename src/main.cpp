@@ -3,6 +3,9 @@ using std::cout;
 using std::cerr;
 using std::endl;
 #include <thread>
+#include <vector>
+#include <string>
+using std::string; using std::vector;
 
 #include <gst/allocators/gstdmabuf.h>
 #include <gst/app/gstappsrc.h>
@@ -26,6 +29,7 @@ struct _App
   GMainLoop* loop;
 
   gboolean isPlaying = false;
+  gboolean debug = false;
 };
 
 typedef struct _Config Config;
@@ -150,11 +154,18 @@ datasrc_message(GstBus *bus, GstMessage *message, App *app)
 		stop();
 		break;
 	default:
-		// logAppend(fmt::format("\n{} received from element {}\n",
-		// GST_MESSAGE_TYPE_NAME(message), GST_OBJECT_NAME(message->src)));
+    if (app->debug)
+  {
+    cerr << GST_MESSAGE_TYPE_NAME(message) << " received from element " << GST_OBJECT_NAME(message->src) << endl;
+  }
 		break;
 	}
-	// gst_debug_bin_to_dot_file(GST_BIN(app->datasrc_pipeline), GST_DEBUG_GRAPH_SHOW_ALL, "pipeline-debug");
+  if (app->debug)
+  {
+    gst_debug_bin_to_dot_file(GST_BIN(app->datasrc_pipeline), GST_DEBUG_GRAPH_SHOW_ALL, "pipeline-debug");
+  }
+  
+	
 	return TRUE;
 }
 
@@ -206,9 +217,18 @@ void start(std::string rtmpTarget)
 	gstreamerThread = std::thread(runGStreamerThread);
 }
 
-int main()
+int main(int argc, char **argv)
 {
-  gst_init(NULL, NULL);
+  gst_init(&argc, &argv);
+  assert( argc >= 1 ); // exploratory -- could fail in principle, but not really
+   const vector<string> args(argv+1,argv+argc); // convert C-style to modern C++
+   for (auto a : args)
+   {
+    if (a=="debug")
+    {
+      app.debug = TRUE;
+    }
+   }
   
   // Create a server that listens on port 8080, or whatever the user selected
   rpc::server srv("0.0.0.0", 5999);
