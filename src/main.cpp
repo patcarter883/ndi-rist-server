@@ -90,6 +90,16 @@ dataFromSender(const uint8_t *buf, size_t len, std::shared_ptr<RISTNetReceiver::
     return 0; //Keep connection
 }
 
+int ristLog(void *arg, enum rist_log_level logLevel, const char *msg)
+{
+  if ((app.debug && logLevel < 8) || (!app.debug && logLevel < 7))
+  {
+    cout << msg << endl;
+  }
+
+	return 1;
+}
+
 void runRistThread()
 {
   RISTNetReceiver ristReceiver;
@@ -106,7 +116,9 @@ void runRistThread()
   std::vector<std::string> interfaceListReceiver;
   interfaceListReceiver.push_back(config.rist_input_address);
   RISTNetReceiver::RISTNetReceiverSettings myReceiveConfiguration;
-
+  myReceiveConfiguration.mLogLevel = RIST_LOG_INFO;
+	myReceiveConfiguration.mProfile = RIST_PROFILE_MAIN;
+	myReceiveConfiguration.mLogSetting.get()->log_cb = *ristLog;
   // Initialize the receiver
   if (!ristReceiver.initReceiver(interfaceListReceiver,
                                       myReceiveConfiguration))
