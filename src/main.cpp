@@ -48,7 +48,6 @@ Config config;
 App app;
 
 std::thread gstreamerThread;
-std::thread ristThread;
 
 //Return a connection object. (Return nullptr if you don't want to connect to that client)
 std::shared_ptr<RISTNetReceiver::NetworkConnection> validateConnection(const std::string &ipAddress, uint16_t port) {
@@ -100,38 +99,6 @@ int ristLog(void *arg, enum rist_log_level logLevel, const char *msg)
 	return 1;
 }
 
-void runRistThread()
-{
-  RISTNetReceiver ristReceiver;
-
-  ristReceiver.validateConnectionCallback = std::bind(
-      &validateConnection, std::placeholders::_1, std::placeholders::_2);
-  // receive data from the client
-  ristReceiver.networkDataCallback = std::bind(&dataFromSender,
-                                                    std::placeholders::_1,
-                                                    std::placeholders::_2,
-                                                    std::placeholders::_3,
-                                                    std::placeholders::_4,
-													std::placeholders::_5);
-  std::vector<std::string> interfaceListReceiver;
-  interfaceListReceiver.push_back(config.rist_input_address);
-  RISTNetReceiver::RISTNetReceiverSettings myReceiveConfiguration;
-  myReceiveConfiguration.mLogLevel = RIST_LOG_INFO;
-	myReceiveConfiguration.mProfile = RIST_PROFILE_MAIN;
-	myReceiveConfiguration.mLogSetting.get()->log_cb = *ristLog;
-  // Initialize the receiver
-  if (!ristReceiver.initReceiver(interfaceListReceiver,
-                                      myReceiveConfiguration))
-  {
-    return;
-  }
-  while (app.isPlaying)
-  {
-    std::this_thread::yield();
-  }
-  return;
-}
-
 void stop() {
   std::cout << "Stopping." << std::endl;
 	app.isPlaying = false;
@@ -139,7 +106,6 @@ void stop() {
 	{
 		g_main_loop_quit(app.loop);
 	}
-	ristThread.join();
 	gstreamerThread.join();
 }
 
@@ -182,6 +148,31 @@ datasrc_message(GstBus *bus, GstMessage *message, App *app)
 }
 
 void runGStreamerThread() {
+    RISTNetReceiver ristReceiver;
+
+  ristReceiver.validateConnectionCallback = std::bind(
+      &validateConnection, std::placeholders::_1, std::placeholders::_2);
+  // receive data from the client
+  ristReceiver.networkDataCallback = std::bind(&dataFromSender,
+                                                    std::placeholders::_1,
+                                                    std::placeholders::_2,
+                                                    std::placeholders::_3,
+                                                    std::placeholders::_4,
+													std::placeholders::_5);
+  std::vector<std::string> interfaceListReceiver;
+  interfaceListReceiver.push_back(config.rist_input_address);
+  RISTNetReceiver::RISTNetReceiverSettings myReceiveConfiguration;
+  myReceiveConfiguration.mLogLevel = RIST_LOG_INFO;
+	myReceiveConfiguration.mProfile = RIST_PROFILE_MAIN;
+	myReceiveConfiguration.mLogSetting.get()->log_cb = *ristLog;
+  // Initialize the receiver
+  if (!ristReceiver.initReceiver(interfaceListReceiver,
+                                      myReceiveConfiguration))
+  {
+    cerr << "Couldn't start RIST Receiver." << endl;
+    return;
+  }
+
   GError *error = NULL;
   GstBus *datasrc_bus;
 
@@ -225,7 +216,6 @@ void start(std::string rtmpTarget)
   std::cout << "Start Requested for destination " <<  rtmpTarget << std::endl;
 	app.isPlaying = true;
 	config.rtmp_output_address = rtmpTarget;
-	ristThread = std::thread(runRistThread);
 	gstreamerThread = std::thread(runGStreamerThread);
 }
 
