@@ -116,20 +116,75 @@ void runRistThread()
   return;
 }
 
+void stop() {
+  std::cout << "Stopping." << std::endl;
+	app.isPlaying = false;
+  if (g_main_loop_is_running(app.loop))
+	{
+		g_main_loop_quit(app.loop);
+	}
+	ristThread.join();
+	gstreamerThread.join();
+}
+
+static gboolean
+datasrc_message(GstBus *bus, GstMessage *message, App *app)
+{
+	GError *err;
+	gchar *debug_info;
+
+	switch (GST_MESSAGE_TYPE(message))
+	{
+	case GST_MESSAGE_ERROR:
+		gst_message_parse_error(message, &err, &debug_info);
+		cerr << "Received error from datasrc_pipeline..." << endl;
+		cerr << "Error received from element " << GST_OBJECT_NAME(message->src) << ": " << err->message << endl;
+		cerr << "Debugging information:  " << (debug_info ? debug_info : "none") << endl;
+		g_clear_error(&err);
+		g_free(debug_info);
+		if (g_main_loop_is_running(app->loop))
+			g_main_loop_quit(app->loop);
+		break;
+	case GST_MESSAGE_EOS:
+		cerr << "Received EOS from pipeline..." << endl;
+		stop();
+		break;
+	default:
+		// logAppend(fmt::format("\n{} received from element {}\n",
+		// GST_MESSAGE_TYPE_NAME(message), GST_OBJECT_NAME(message->src)));
+		break;
+	}
+	// gst_debug_bin_to_dot_file(GST_BIN(app->datasrc_pipeline), GST_DEBUG_GRAPH_SHOW_ALL, "pipeline-debug");
+	return TRUE;
+}
+
 void runGStreamerThread() {
   GError *error = NULL;
+  GstBus *datasrc_bus;
 
 	app.loop = g_main_loop_new(NULL, FALSE);
 	std::string pipeline_str = "flvmux streamable=true name=mux ! queue ! rtmpsink location='" + config.rtmp_output_address + "'name=rtmpSink multiqueue name=outq appsrc name=videosrc ! queue2 ! tsparse set-timestamps=true alignment=7 ! tsdemux name=demux demux. ! av1parse ! queue ! nvav1dec ! queue ! videoscale ! video/x-raw,width=2560,height=1440 ! queue ! nvautogpuh264enc rate-control=cbr-hq bitrate=16000 gop-size=120 repeat-sequence-header=true preset=hq ! video/x-h264,framerate=60/1,profile=high ! h264parse ! outq.sink_0 outq.src_0 ! mux.  demux. ! aacparse ! queue max-size-time=5000000000 ! outq.sink_1 outq.src_1 ! mux.";
 	// std::string pipeline_str = "flvmux streamable=true name=mux ! queue ! rtmpsink name=rtmpSink location='rtmp://sydney.restream.io/live/re_6467989_5e25e884e7fc0b843888 live=true' multiqueue name=outq appsrc name=videosrc ! queue2 ! tsparse set-timestamps=true alignment=7 ! tsdemux name=demux demux. ! av1parse ! queue ! d3d11av1dec ! queue ! videoscale ! video/x-raw,width=2560,height=1440 ! queue ! amfh264enc rate-control=cbr bitrate=16000 gop-size=120 ! video/x-h264,framerate=60/1,profile=high ! h264parse ! outq.sink_0 outq.src_0 ! mux.  demux. ! aacparse ! queue max-size-time=5000000000 ! outq.sink_1 outq.src_1 ! mux.";
+  cout << "Running Pipeline: " << pipeline_str << endl;
 	app.datasrc_pipeline = gst_parse_launch(pipeline_str.c_str(), &error);
   if (error) {
-    g_print ("Error: %s\n", error->message);
+    cerr << "Error: " << error->message << endl;
     g_clear_error (&error);
   }
+  if (app.datasrc_pipeline == NULL)
+	{
+		cerr << "*** Bad pipeline. ***" << endl;
+	}
 	// app.videosrc = gst_bin_get_by_name(GST_BIN(app.datasrc_pipeline), "videosrc");
 	// GstElement* rtmpsink = gst_bin_get_by_name(GST_BIN(app.datasrc_pipeline), "rtmpSink");
 	// g_object_set(G_OBJECT(rtmpsink), "location", config.rtmp_output_address.c_str(), NULL);
+
+  datasrc_bus = gst_element_get_bus(app.datasrc_pipeline);
+
+	/* add watch for messages */
+	gst_bus_add_watch(datasrc_bus, (GstBusFunc)datasrc_message, &app);
+	gst_object_unref(datasrc_bus);
+
 	gst_element_set_state(app.datasrc_pipeline, GST_STATE_PLAYING);
 
 	g_main_loop_run(app.loop);
@@ -149,16 +204,6 @@ void start(std::string rtmpTarget)
 	config.rtmp_output_address = rtmpTarget;
 	ristThread = std::thread(runRistThread);
 	gstreamerThread = std::thread(runGStreamerThread);
-}
-
-void stop() {
-	app.isPlaying = false;
-  if (g_main_loop_is_running(app.loop))
-	{
-		g_main_loop_quit(app.loop);
-	}
-	ristThread.join();
-	gstreamerThread.join();
 }
 
 int main()
